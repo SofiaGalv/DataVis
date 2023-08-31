@@ -1,0 +1,254 @@
+---
+title: "DATA VISUALIZATION WITH GGPLOT2"
+author: "Sofía Galván and Miranta Kouvari"
+date: "2023-08-25"
+output: html_document
+---
+
+Before starting, an equivalent script using Base R for plotting will be available on the workshop webpage.
+
+### Let's begin!
+
+
+1. First, let's load and prepare the packages and data we are going to work with. In this case, we'll use the `tetrapods` dataset provided by `palaeoverse` package. Also, we'll start preparing these data following [Data preparation](https://hackathon.palaeoverse.org/preparation.html) previous tutorial. 
+
+```{r, message = FALSE, warning= FALSE}
+library(palaeoverse)
+library(ggplot2)
+library(svglite)
+library(deeptime)
+library(extrafont)
+data(tetrapods)
+?tetrapods
+
+# Assign a common time scale based on an interval key
+tetrapods <- look_up(occdf = tetrapods,
+                     early_interval = "early_interval",
+                     late_interval = "late_interval",
+                     int_key = interval_key)
+
+# Making any values which could not be matched contain their original values
+tetrapods$interval_max_ma <- ifelse(is.na(tetrapods$interval_max_ma),
+                                    tetrapods$max_ma,
+                                    tetrapods$interval_max_ma)
+tetrapods$interval_min_ma <- ifelse(is.na(tetrapods$interval_min_ma),
+                                    tetrapods$min_ma,
+                                    tetrapods$interval_min_ma)
+tetrapods$interval_mid_ma <- (tetrapods$min_ma + tetrapods$max_ma)/2
+
+#Count number of occurrences per interval
+tetrapods_time <- group_apply(occdf = tetrapods, group = "interval_mid_ma", fun = nrow)
+tetrapods_time$nrow <- as.numeric(tetrapods_time$nrow)
+tetrapods_time$interval_mid_ma <- as.numeric(tetrapods_time$interval_mid_ma)
+```
+
+*The general code for plotting with ggplot will be:*
+
+`ggplot(data = my_data, aes(x = my_var1, y = my_var2)) + geom_point()`
+
+
+2. Now, let's explore the distribution of one variable through histograms (for continuous variables) and bar plots (for discrete ones).
+
+```{r, warning= FALSE}
+
+ggplot(data = tetrapods, mapping = aes(x = interval_mid_ma)) +
+  geom_histogram(breaks=seq(from = 240, to = 360, by = 5),
+                 color="black", fill="lavender")
+
+ggplot(data = tetrapods, mapping = aes(x = interval_mid_ma)) +
+  geom_histogram(aes(y = after_stat(density)),
+                 breaks=seq(from = 240, to = 360, by = 5),
+                 color="black", fill="lavender") +
+  geom_density() #Adding a density curve
+
+ggplot(data = tetrapods, mapping = aes(x =diet)) +
+  geom_bar(color="black", fill="lavender")
+```
+
+
+3. When exploring more than one variable at a time, we can use scatter plots.
+
+```{r, warning = FALSE}
+ggplot(data = tetrapods, mapping = aes(x = interval_mid_ma, y = lat)) + 
+  geom_point() #For a continous variable
+ggplot(data = tetrapods, mapping = aes(x = diet, y = lat)) + 
+  geom_point() #For a discrete variable
+```
+
+We can add other things to the plot, such as a geological axis with the `coor_geo` function of the `deeptime` package:
+
+```{r, warning = FALSE}
+ggplot(data = tetrapods, 
+       mapping = aes(x = interval_mid_ma, y = lat, color = as.factor(class))) + 
+  geom_point() +
+  xlim(243,355) +
+  xlab("Minimun age (Ma)") + ylab("Latitude (\u00B0)") +
+  coord_geo(ylim = c(-90,90))
+```
+
+And adding more things:
+
+```{r}
+ggplot(data = tetrapods, mapping = aes(x = min_ma, y = lat, color = as.factor(class))) + 
+  geom_point(size = 2, shape = 16) +
+  xlab("") + ylab("Latitude (\u00B0)") +
+  xlim(350, 240) + 
+  scale_y_continuous(limits = c(-90, 90), breaks = c(-90,-50,0,50,90)) +
+  scale_color_manual(values = c("#f2cb61", "#66B2FF", "#FF5CAD")) +
+  theme_classic() + #Here, we're changing the theme of the plot
+  theme(legend.title = element_blank()) + #and removing the legend title
+  coord_geo(dat = list("epochs", "periods"), pos = list("b", "b"),
+            xlim = c(350, 240), ylim = c(-90,90), size = 4.5,
+            center_end_labels = T)
+```
+
+
+4. If we want to compare between groups, box and violin plots are handy.
+
+```{r}
+ggplot(data = tetrapods, mapping = aes(x = diet, y = lat)) + 
+  geom_boxplot()
+
+tetrapods <- tetrapods[!is.na(tetrapods$diet),] #Remove entries with no diet information
+colcajas <- c("#dfcc74", "#51a3a3", "#cb904d", "#75485e")
+
+#And adding something more:
+ggplot(data = tetrapods, mapping = aes(x = diet, y = lat)) + 
+  geom_boxplot(fill = colcajas, outlier.shape = NA, width = 0.6) +
+  xlab("Diet") + ylab("Latitude (\u00B0)") +
+  scale_y_continuous(limits = c(-90, 90), breaks = c(-90,-50,0,50,90)) +
+  scale_x_discrete(labels = c("Carnivore", "Herbivore", "Insectivore/Herbivore", "Piscivore")) +
+  theme_classic()
+```
+
+```{r}
+#We will store this plot in a R object.
+my_plot <- ggplot(data = tetrapods, mapping = aes(x = diet, y = lat, fill = diet)) + 
+  geom_violin(scale = "width") +
+  geom_boxplot(width=0.06, fill = "white", outlier.shape = NA) + #Adding a boxplot to the violinplot
+  xlab("Diet") + ylab("Latitude (\u00B0)") +
+  scale_fill_manual(values = colcajas) +
+  scale_y_continuous(limits = c(-90, 90), breaks = c(-90,-50,0,50,90)) +
+  scale_x_discrete(labels = c("Carnivore", "Herbivore", "Insectivore/Herbivore", "Piscivore")) +
+  theme_classic() +
+  theme(legend.position="none") 
+```
+
+
+5. Lastly, we can save our plots by `ggsave` function, among others.
+
+```{r}
+ggsave(file = "DV_ggplot1.svg", plot = my_plot, device = "svg", scale = 2, 
+       width = 150, height = 100, units = "mm", dpi = 72, limitsize = TRUE)
+```
+
+
+6. Lastly, we should cite the packages we used, for example:
+
+```{r}
+citation("palaeoverse") 
+```
+
+
+## EXTRA!
+
+7. We can change our plot font, using the `extrafont` package to import all the fonts.
+
+```{r}
+font_import()
+fonts()[1:10] #Show the first 10 fonts
+```
+
+8. We also can customize the theme before calling the `ggplot` function. This is useful if we want to apply it to several plots. For more about theme configuration, see `?theme`
+
+```{r}
+Font1 <- "Palatino Linotype"
+Size1 <- 13
+Size2 <- 11
+Map_col <- "#232B2B" 
+Border_col <- "#FFFFFF"
+
+theme <- theme(
+  panel.background = element_blank(),
+  plot.margin = margin(0.5, 0.5, 0.5, 0.5, "cm"),
+  legend.justification= c(0,1),
+  legend.position = c(0.05, 0.85),legend.title = element_blank(),
+  legend.background = element_blank(),
+  legend.key = element_rect(colour = NA, fill = NA),
+  legend.key.size = unit(1.5, "lines"),
+  legend.key.width = unit(1.5, "cm"),
+  legend.text = element_text(
+    size = Size2,
+    face = "bold",
+    family = Font1),
+  panel.border = element_rect(colour = "black", fill = NA),
+  axis.text.x = element_text(
+    size = Size2,
+    angle = 0,
+    hjust = 0.5,
+    family = Font1),
+  axis.text.y = element_text(
+    size = Size2,
+    angle = 0,
+    hjust = 0,
+    family = Font1),
+  axis.title.y = element_text(
+    size = Size1,
+    vjust = 5,
+    family = Font1),
+  axis.title.x = element_text(
+    size = Size1,
+    vjust = -1,
+    family = Font1),
+  aspect.ratio = 0.6
+  )
+```
+
+Let's apply it to an example plot:
+
+```{r}
+#First, we will prepare the background of the plot.
+data(GTS2020)
+GTS2020 <- GTS2020[GTS2020$rank == "stage",]
+GTS2020 <- GTS2020[GTS2020$min_ma >= 240 & GTS2020$max_ma <= 360,]
+
+seq <- seq(1, 19, 2)
+rect <- GTS2020[seq,]
+
+#Then, we plot
+ggplot() +
+  geom_rect(
+    data = rect,
+    mapping = aes(
+      xmin = min_ma,
+      xmax = max_ma,
+      ymin = 0,
+      ymax = max(tetrapods_time$nrow) + 20
+    ),
+    linetype = 0,
+    color = "grey90",
+    alpha = 0.1
+  )  +
+  geom_line(data = tetrapods_time, aes(
+    x = interval_mid_ma,
+    y = nrow,
+  ), linewidth = 1) +
+  geom_point(data = tetrapods_time, aes(
+    x = interval_mid_ma,
+    y = nrow,
+  ), size = 2.5) + 
+  scale_x_reverse(expand = c(0, 0)) +
+  scale_y_continuous(expand = c(0, 0)) +
+  labs(x = "Time (Ma)", y = "Raw counts") +
+  coord_geo(dat = list("stage", "epochs"), pos = list("b", "b"),
+            xlim = c(355, 245), ylim = c(0,max(tetrapods_time$nrow)+20), 
+            height = unit(1.5, "line"), size = 2.5,
+            center_end_labels = T) +
+  theme #this is the theme object from above
+```
+
+### References
+
+ggplot2: Create Elegant Data Visualisations Using the Grammar of Graphics. https://cran.r-project.org/web/packages/ggplot2/index.html
+
+R for Palaeobiologists: Workshop and Hackathon. https://hackathon.palaeoverse.org/

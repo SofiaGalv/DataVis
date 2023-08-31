@@ -1,0 +1,194 @@
+---
+title: "SPATIAL DATA VISUALIZATION"
+author: "Sofía Galván and Miranta Kouvari"
+date: "2023-08-25"
+output: html_document
+---
+
+1. First, let's load and prepare the packages and data we are going to work with. In this case, we'll use the `tetrapods` dataset provided by `palaeoverse` package. 
+
+```{r, message=FALSE}
+library(palaeoverse)
+library(raster)
+library(terra)
+library(sf)
+library(maps)
+library(ggplot2)
+library(RColorBrewer)
+library(ggpubr)
+library(rpaleoclim)
+library(rgplates)
+
+
+data(tetrapods)
+tetrapods$mid_age <- (tetrapods$max_ma + tetrapods$min_ma)/2 #Roughly calculate medium ages.
+```
+
+### VECTOR DATA
+
+2. For vector data, we'll start working with `sp` package (although `sf` is preferred).
+
+```{r}
+tetrapods_sp <- tetrapods #We need to create a special R object for sp.
+coordinates(tetrapods_sp) <- c("lng", "lat") #Now it's a SpatialPointDataframe
+proj4string(tetrapods_sp) <- CRS("+proj=longlat +datum=WGS84 +no_defs")
+
+World <- st_as_sf(map('world', plot = FALSE, fill = TRUE)) #from maps package, which returns a "sf" class object
+World <- st_transform(World, crs = "+proj=longlat +datum=WGS84 +no_defs")
+World_sp <- sf::as_Spatial(World) #Transform the sf object into a sp object
+
+sp::plot(World_sp)
+plot(tetrapods_sp, col = "maroon", add = T)
+
+spplot(tetrapods_sp, "mid_age",
+       sp.layout = list(World_sp)) #Using a specific function to plot a variable with the data.
+```
+
+Now, we'll calculate the number of occurrences per country and plot it:
+
+```{r}
+fos_percountry <- over(tetrapods_sp, World_sp)
+table(fos_percountry$ID)[1:10] #Show first 10 results
+
+par(mar = c(4, 4, 1, 2))
+barplot(sort(table(fos_percountry$ID)),
+        horiz = T, cex.names = 0.5,  las = 2)
+dev.off()
+```
+
+3. We repeat the previous steps with `sf` package.
+
+```{r}
+tetrapods_sf <- st_as_sf(tetrapods, coords = c("lng", "lat"),
+                         crs = "+proj=longlat +datum=WGS84 +no_defs") #Now, we need to create a sf object
+
+#We can compare both object looking into str(tetrapods_sp) and str(tetrapods_sf)
+
+World <- st_as_sf(map('world', plot = FALSE, fill = TRUE)) #from maps package, which returns a "sf" class object
+World <- st_transform(World, crs = "+proj=longlat +datum=WGS84 +no_defs")
+
+#there is specific ggplot functions for sf objects.
+ggplot() +
+  geom_sf(data = World) +
+  geom_sf(data = tetrapods_sf) +
+  coord_sf(crs = "+proj=laea") #in a equal area projection
+```
+
+Now, we'll calculate the number of occurrences per country and plot it:
+
+```{r, message= FALSE}
+sf::sf_use_s2(FALSE)
+fos_percountry <- st_intersection(x = World, y = tetrapods_sf) #It takes a little of time
+table(fos_percountry$ID)[1:10]
+
+par(mar = c(4, 4, 1, 2))
+barplot(sort(table(fos_percountry$ID)),
+        horiz = T, cex.names = 0.5,  las = 2)
+dev.off()
+```
+
+
+## RASTER DATA
+
+4. We'll use `terra` package and random environmental data from http://www.paleoclim.org/ using the `rpaleoclim` package (just as an example for visualization).
+
+```{r}
+Pclim_lgm <- paleoclim(period = "lgm", resolution = "10m") 
+Pclim_Temp <- Pclim_lgm$bio_1/10 # the original values are ºC*10
+Pclim_Prec <- Pclim_lgm$bio_12 #mm/year
+plot(Pclim_Temp)
+plot(Pclim_Prec)
+```
+
+We need to transform these `SpatRaster` objects into a dataframe to plot them with `ggplot2`.
+
+```{r}
+Temp_df <- terra::as.data.frame(Pclim_Temp, xy = T, na.rm = F)
+
+ggplot() +
+  geom_raster(data = Temp_df, aes (x = x, y = y, fill = bio_1)) +
+  scale_fill_gradient(low = "white", high = "darkred") +
+  coord_sf(crs=crs(Pclim_Temp), expand = F) +
+  geom_point(aes(x = tetrapods$lng, y = tetrapods$lat))
+
+#Let's create a color palette
+my_gradient <- colorRampPalette(rev(brewer.pal(9, "RdYlBu")))
+
+p1 = ggplot() +
+  geom_raster(data = Temp_df, aes (x = x, y = y, fill = bio_1)) +
+  xlab("") + ylab("") +
+  scale_fill_gradientn(colors = my_gradient(30), name = "Temperature") +
+  coord_sf(crs=crs(Pclim_Temp), expand = F) +
+  geom_point(data = tetrapods, aes(x = lng, y = lat, color = as.factor(class))) +
+  scale_color_manual(values = c("black", "royalblue3", "seagreen1"), name = "Class") +
+  theme(legend.key.size = unit(0.35, "cm"))
+```
+
+If we want to plot two plots at the same figure, we can use `grid.arrange`:
+
+```{r}
+Prec_df <- terra::as.data.frame(Pclim_Prec, xy = T, na.rm = F)
+my_gradient2 <- colorRampPalette(brewer.pal(9, "YlGn"))
+
+p2 = ggplot() +
+  geom_raster(data = Prec_df, aes (x = x, y = y, fill = bio_12)) +
+  xlab("") + ylab("") +
+  scale_fill_gradientn(colors = my_gradient2(30), name = "Precipitation") +
+  coord_sf(crs=crs(Pclim_Prec), expand = F) +
+  geom_point(data = tetrapods, aes(x = lng, y = lat, color = as.factor(diet))) +
+  scale_color_manual(values = c("slateblue1", "red4","maroon2","yellow2"), name = "Diet") +
+  theme(legend.key.size = unit(0.35, "cm"))
+
+ggarrange(p1, p2, ncol = 1, nrow = 2, align = "hv")
+```
+
+5. Imagine we want to plot fossil occurrences not just in the present, but deeper in time. To do so, we need to generate the palaeocoordinates for our occurrence data (`palaeorotate` function in `palaeoverse` package), as well as reconstruct the paleo-maps (`reconstruct` function in `rgplates` package) 
+
+```{r, message = FALSE}
+tetrapods_GOLONKA <- palaeorotate(tetrapods, age = "mid_age", 
+                                   method = "point", model = "GOLONKA")
+midpoints <- sort(unique(tetrapods_GOLONKA$mid_age))
+summary(midpoints)
+
+#Let's plot, for example, the 285.7 Ma scenario
+tetrapods_subset <- tetrapods_GOLONKA[tetrapods_GOLONKA$mid_age == 285.7,]
+plates1 <- reconstruct("coastlines", age = 285.7, model = "GOLONKA") #reconstructing plates
+
+plot(plates1, border=NA, col="azure4", axes = T, bgc = "lightblue1",
+     main = paste("285.7", "Ma"))
+points(tetrapods_subset$p_lng, tetrapods_subset$p_lat, col = "red", pch = 19)
+```
+
+6. Lastly, we should cite the packages we used, for example:
+
+```{r}
+citation("terra") 
+```
+
+
+## EXTRA!
+
+7. Let's create a loop to plot fossil occurrences along time.
+
+```{r, message = FALSE}
+my_midpoints <- seq(length(midpoints), 1, by = -10)
+
+for (i in my_midpoints) {
+  tetrapods_subset <- tetrapods_GOLONKA[tetrapods_GOLONKA$mid_age == midpoints[i],]
+  plates <- reconstruct("coastlines", age = midpoints[i], model = "GOLONKA")
+  plot(plates,border=NA, col="azure4", axes = T, bgc = "lightblue1",
+       main = paste(midpoints[i], "Ma"))
+  points(tetrapods_subset$p_lng, tetrapods_subset$p_lat, col = "red", pch = 19)
+}
+```
+
+
+### References:
+
+CRAN Task View: Analysis of Spatial Data. https://cran.r-project.org/web/views/Spatial.html
+
+GPlates Web Service: https://gwsdoc.gplates.org/ 
+
+PaleoClim: http://www.paleoclim.org/
+
+R for Palaeobiologists: Workshop and Hackathon. https://hackathon.palaeoverse.org/

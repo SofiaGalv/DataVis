@@ -1,0 +1,119 @@
+---
+title: "DATA VISUALIZATION WITH BASE R"
+author: "Sofía Galván and Miranta Kouvari"
+date: "2023-08-28"
+output: html_document
+---
+
+1. First, let's load and prepare the packages and data we are going to work with. In this case, we'll use the `tetrapods` dataset provided by `palaeoverse` package, and we'll explore it.
+
+```{r, message = FALSE, warning= FALSE}
+library(palaeoverse)
+library(Hmisc)
+library(vioplot)
+
+data(tetrapods)
+summary(tetrapods$lat) #Summaries of numeric variables
+table(tetrapods$order) #Counts of a variable
+head(tetrapods)[1:10] #First columns of the dataframe
+str(tetrapods) #General structure: 5270 obs and 32 variables
+?tetrapods
+
+tetrapods$mid_age <- (tetrapods$max_ma + tetrapods$min_ma)/2 #Roughly calculate medium ages.
+```
+
+2. Now, let's explore the distribution of one variable through histograms (for continuous variables) and bar plots (for discrete ones).
+
+```{r, warning = FALSE}
+hist(tetrapods$mid_age)
+hist(tetrapods$mid_age, breaks=seq(from = 240, to = 360, by = 5), 
+     xlab = "Middle age (Ma)",
+     main = "")
+
+dens_line <- density(tetrapods$mid_age)
+hist(tetrapods$mid_age, breaks=seq(from = 240, to = 360, by = 5),
+     xlab = "", main = "Middle age (Ma)", freq = F)
+lines(dens_line)
+
+barplot(table(tetrapods$diet))
+```
+
+3. When exploring more than one variable at a time, we can use scatter plots.
+
+```{r, warning = FALSE}
+plot(x = tetrapods$mid_age, tetrapods$lat)
+```
+
+We can add other things to the plot, such as a geological axis with the `axis_geo` function of the `palaeoverse` package:
+
+```{r, warning = FALSE}
+plot(x = tetrapods$mid_age, tetrapods$lat, ylab = "Latitude (\u00B0)", 
+     xlim = c(350, 250), xaxt = "n", xlab = "Time (Ma)", type = "p", pch = 20)
+axis_geo(side = 1, intervals = "periods")
+```
+
+And adding more things:
+
+```{r}
+my_colors <- c("#f2cb61", "#66B2FF", "#FF5CAD")
+plot(x = tetrapods$mid_age, tetrapods$lat, ylab = "Latitude (\u00B0)",
+     ylim = c(-90,90), yaxt = "n", xlab = NA, xlim = c(354, 250), xaxt = "n", 
+     type = "p", pch = 20, cex = 1.3, col = my_colors[factor(tetrapods$class)])
+legend("bottomleft", legend = levels(factor(tetrapods$class)),
+       pch = 20, col = my_colors)
+axis(2, at = c(-90, -50, 0, 50, 90))
+axis_geo(side = 1, intervals = list("epochs", "periods"),
+         lab_size = 0.6, exact = T, round = 1)
+```
+
+4. If we want to compare between groups, box and violin plots are handy.
+
+```{r}
+table(tetrapods$diet)
+boxplot(tetrapods$mid_age)
+
+colcajas <- c("#dfcc74", "#51a3a3", "#cb904d", "#75485e")
+boxplot(lat ~ diet, data = tetrapods, xlab = "Diet", ylab = "Latitude (\u00B0)",
+        ylim = c(-90,90), axes = F, cex.axis = 0.9, boxwex = 0.6, 
+        outline = F, col = colcajas)
+axis(2, at = c(-90, -50, 0, 50, 90))
+axis(1, labels = c("Carnivore", "Herbivore", "Insectivore/Herbivore", "Piscivore"), 
+     at = c(1:4))
+minor.tick(nx = 1, ny = 2)
+```
+
+```{r}
+#Violin plot
+vioplot(lat ~ diet, data = tetrapods, xlab = "Diet", ylab = "Latitude (\u00B0)",
+        ylim = c(-90,90), xaxt = "n", yaxt = "n", axes = F, cex.axis = 0.9, 
+        boxwex = 0.6, outline = F, col = colcajas)
+axis(2, at = c(-90, -50, 0, 50, 90))
+axis(1, labels = c("Carnivore", "Herbivore", "Insectivore/Herbivore", "Piscivore"), 
+     at = c(1:4))
+minor.tick(nx = 1, ny = 2)
+```
+
+5. Lastly, we can save our plots with `pdf`or `svg` function, among others.
+
+```{r, message = FALSE}
+svg("DV_baseRplot1.svg", width = 10, height = 7)
+vioplot(lat ~ diet, data = tetrapods, xlab = "Diet", ylab = "Latitude (\u00B0)",
+        ylim = c(-90,90), xaxt = "n", yaxt = "n", axes = F, cex.axis = 0.9, 
+        boxwex = 0.6, outline = F, col = colcajas)
+axis(2, at = c(-90, -50, 0, 50, 90))
+axis(1, labels = c("Carnivore", "Herbivore", "Insectivore/Herbivore", "Piscivore"), 
+     at = c(1:4))
+minor.tick(nx = 1, ny = 2)
+dev.off()
+```
+
+6. Lastly, we should cite the packages we used, for example:
+
+```{r}
+citation("palaeoverse") 
+```
+
+
+### References
+
+R for Palaeobiologists: Workshop and Hackathon. https://hackathon.palaeoverse.org/
